@@ -19,6 +19,7 @@ $(document).ready(() => {
         generateWeekOptions();
         setupEventListeners();
         loadTeacherSchedule(staffId, currentWeek);
+        loadTeacherInfo(staffId);
     }
 
     function setupEventListeners() {
@@ -28,13 +29,22 @@ $(document).ready(() => {
     }
 
     async function loadTeacherSchedule(staffId, week) {
+        if (!staffId) {
+            console.error('staffId is undefined');
+            return;
+        }
+    
         console.log(`Loading schedule for staffId: ${staffId}, week: ${week}`);
         showLoading();
-
+    
         try {
             const response = await fetchSchedule(staffId, week);
             console.log("Данные с сервера:", response);
-
+    
+            if (!response || !response.schedule) {
+                throw new Error('Неверный формат данных расписания');
+            }
+    
             renderTeacherSchedule(response);
             updateCurrentWeekDisplay(week);
             updateNavigationButtons(week);
@@ -45,7 +55,7 @@ $(document).ready(() => {
             hideLoading();
         }
     }
-
+    
     async function fetchSchedule(staffId, week) {
         try {
             const url = `/api/teacherSchedule?staffId=${staffId}&week=${week}`;
@@ -67,17 +77,19 @@ $(document).ready(() => {
     }
 
     function renderTeacherSchedule(data) {
-        const {
-            teacherName,
-            dates,
-            schedule
-        } = data;
-
+        const { teacherName, teacherInfo, dates, schedule } = data;
+    
         console.log("Данные для отображения:", data);
-        console.log("teacherName:", teacherName);
-
         $('#teacherHeader').text(teacherName);
-
+        const $teacherInfoContainer = $('#teacherInfo');
+        $teacherInfoContainer.empty();
+        if (teacherInfo) {
+            $teacherInfoContainer.append(
+                $('<h2>').text(teacherInfo.title || 'Информация о преподавателе'),
+                $('<div>').html(teacherInfo.description || 'Нет дополнительной информации'),
+                $('<div>').text(teacherInfo.semesterInfo || '')
+            );
+        }
         const $table = $('<table>').addClass('schedule-table');
         const $thead = $('<thead>');
         const $tbody = $('<tbody>');
@@ -89,6 +101,7 @@ $(document).ready(() => {
                 )
             )
         );
+    
         Object.keys(schedule).forEach(time => {
             $tbody.append(
                 $('<tr>').append(
@@ -102,10 +115,62 @@ $(document).ready(() => {
                 )
             );
         });
-        $('#scheduleTable').empty().append(
-            $thead, $tbody
-        );
+        $('#scheduleTable').empty().append($thead, $tbody);
     }
+    
+    async function loadTeacherInfo(staffId) {
+        if (!staffId) {
+            console.error('staffId is undefined');
+            return;
+        }
+    
+        console.log('Загрузка информации о преподавателе с ID:', staffId);
+    
+        try {
+            const response = await $.getJSON(`/api/teacherInfo?staffId=${staffId}`);
+    
+            console.log('Информация о преподавателе с сервера:', response);
+    
+            if (response && response.success) {
+                renderTeacherInfo(response);
+            } else {
+                console.error('Ошибка при загрузке информации о преподавателе:', response ? response.error : 'Неизвестная ошибка');
+                showError('Не удалось загрузить информацию о преподавателе');
+                document.getElementById('teacherInfo').innerHTML = '';
+            }
+    
+        } catch (error) {
+            console.error('Ошибка при загрузке информации о преподавателе:', error);
+            showError('Ошибка при загрузке информации о преподавателе');
+            document.getElementById('teacherInfo').innerHTML = '';
+        }
+    }
+    
+    function renderTeacherInfo(data) {
+        console.log("Данные для отображения информации о преподавателе:", data);
+    
+        const { teacherName, teacherInfo } = data;
+        const teacherInfoElement = document.getElementById('teacherInfo');
+        console.log("teacherInfoElement:", teacherInfoElement);
+    
+        if (!teacherInfoElement) {
+            console.error("Элемент с ID 'teacherInfo' не найден");
+            return;
+        }
+        if (teacherInfoElement.children.length === 0) {
+            if (teacherName) {
+                const h2 = document.createElement('h2');
+                h2.textContent = teacherName;
+                teacherInfoElement.appendChild(h2);
+            }
+            if (teacherInfo) {
+                const p = document.createElement('p');
+                p.innerHTML = teacherInfo;
+                teacherInfoElement.appendChild(p);
+            }
+        }
+    }
+    
 
     function formatLessonContent(html) {
         return html.replace(/<a href="\/rasp\?groupId=(\d+)/g,

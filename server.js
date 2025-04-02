@@ -21,10 +21,11 @@ const SSAU_BASE_URL = 'https://ssau.ru/rasp';
 async function fetchScheduleHTML(url) {
     try {
         const response = await axios.get(url);
+        console.log(`Загружено ${url}:`, response.status, response.statusText);
         return response.data;
     } catch (error) {
-        console.error(`Error fetching URL ${url}:`, error.message);
-        throw new Error(`Failed to fetch schedule from ${url}`);
+        console.error(`Ошибка при загрузке ${url}:`, error.message);
+        throw new Error(`Не удалось загрузить schedule из ${url}`);
     }
 }
 
@@ -261,6 +262,50 @@ app.get('/api/teacherSchedule', async (req, res) => {
     } catch (error) {
         console.error('Error while fetching or processing teacher schedule:', error.message);
         res.status(500).json({ success: false, error: 'Failed to fetch teacher schedule', details: error.message });
+    }
+});
+
+app.get('/api/teacherInfo', async (req, res) => {
+    try {
+        const staffId = req.query.staffId;
+        console.log("Получен staffId:", staffId);
+
+        if (!staffId) {
+            return res.status(400).json({ success: false, error: 'Missing staffId' });
+        }
+
+        const url = `${SSAU_BASE_URL}?staffId=${staffId}`;
+        console.log(`Fetching teacher info from URL: ${url}`);
+
+        const html = await fetchScheduleHTML(url);
+        const $ = cheerio.load(html);
+        let teacherName = $('.page-header h1.h1-text').text().trim();
+        teacherName = teacherName.replace('Расписание, ', '');
+        console.log(`Teacher name: ${teacherName}`);
+
+        if (!teacherName) {
+            return res.status(404).json({ success: false, error: 'Teacher not found' });
+        }
+
+        const teacherInfoBlock = $('.card-default.info-block');
+        let teacherDescription = '';
+        teacherInfoBlock.find('.info-block__description div').each((_, descElem) => {
+            teacherDescription += $(descElem).text().trim() + '<br>';
+        });
+        console.log(`Teacher description: ${teacherDescription}`);
+        let semesterInfo = teacherInfoBlock.find('.info-block__semester div').text().trim();
+        teacherDescription += `<br>${semesterInfo}`;
+
+        res.json({
+            success: true,
+            staffId,
+            teacherName,
+            teacherInfo: teacherDescription
+        });
+
+    } catch (error) {
+        console.error('Error while fetching or processing teacher info:', error.message);
+        res.status(500).json({ success: false, error: 'Failed to fetch teacher info', details: error.message });
     }
 });
 
